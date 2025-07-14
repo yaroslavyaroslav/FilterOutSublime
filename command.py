@@ -5,11 +5,16 @@ import sublime_plugin
 
 
 # ───────────────────────── core helper ─────────────────────────
-def _apply_filter(view: sublime.View, text: str):
+def _apply_filter(view: sublime.View, raw: str):
+    """Fold away every line that does NOT match any token in *raw*.
+    Tokens are whitespace-separated → OR logic."""
     view.unfold(sublime.Region(0, view.size()))
-    if not text:
+    tokens = [re.escape(t) for t in raw.split() if t]
+    if not tokens:
         return
-    pat = re.compile(re.escape(text), re.IGNORECASE)
+
+    pat = re.compile("|".join(tokens), re.IGNORECASE)
+
     folds, start = [], None
     for line in view.lines(sublime.Region(0, view.size())):
         if pat.search(view.substr(line)):
