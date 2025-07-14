@@ -1,0 +1,10 @@
+[
+    {
+        "caption": "FilterOut: Filter",
+        "command": "panel_live_filter"
+    },
+    {
+        "caption": "FilterOut: Reset",
+        "command": "panel_filter_reset"
+    },
+]
