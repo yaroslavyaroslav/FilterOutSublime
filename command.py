@@ -1,3 +1,4 @@
+from __future__ import annotations
 import re
 import sublime
 import sublime_plugin
@@ -5,78 +6,84 @@ import sublime_plugin
 
 class PanelLiveFilterCommand(sublime_plugin.WindowCommand):
     """
-    1. Let the user pick one of the currently-open output panels.
-    2. Open an input panel and, on every keystroke, fold away all lines
-       that do **not** contain the typed text (case-insensitive).
+    1. Pick an output panel.
+    2. Show an input panel for the filter text.
+    3. Fold non-matching lines live as you type.
+    4. Press Enter → freeze filter until reset.
     """
 
     def run(self):
-        self.panels = [p for p in self.window.panels() if p.startswith("output.")]
-        if not self.panels:
+        panels = [p for p in self.window.panels() if p.startswith("output.")]
+        if not panels:
             sublime.error_message("No output panels found.")
             return
+        names = [p[7:] for p in panels]  # strip "output."
+        self.panels = dict(zip(names, panels))  # {name: full_id}
+        self.window.show_quick_panel(names, self.on_pick)
 
-        self.window.show_quick_panel(
-            self.panels,
-            self.on_panel_selected,
-        )
-
-    def on_panel_selected(self, index):
+    # ── step 1 ────────────────────────────────────────────
+    def on_pick(self, index: int):
         if index == -1:
-            return  # user cancelled
-
-        # Strip the "output." prefix for find_output_panel()
-        name = self.panels[index][len("output.") :]
-        self.view_to_filter = self.window.find_output_panel(name)
-        if not self.view_to_filter:
-            sublime.error_message("Selected panel disappeared.")
             return
-
-        # Start live filtering
+        self.panel_name = list(self.panels.keys())[index]
+        self.panel_view = self.window.find_output_panel(self.panel_name)
+        if not self.panel_view:
+            return
+        # bring panel to front
+        self.window.run_command("show_panel", {"panel": self.panels[self.panel_name]})
+        # step 2: ask for filter text
+        self.freeze = False
         self.window.show_input_panel(
-            "Live filter ›",  # caption
-            "",  # initial text
-            lambda _: None,  # on_done – no-op
-            self.on_change,  # on_change – live updates
-            None,  # on_cancel – leave folds as-is
+            f"Filter “{self.panel_name}” ›",
+            "",
+            self.on_done,  # Enter
+            self.on_change,  # every keystroke
+            None,  # Esc
         )
 
-    # --- helpers ---------------------------------------------------------
+    # ── live update ───────────────────────────────────────
+    def on_change(self, text: str):
+        if not self.freeze:
+            self.apply_filter(text)
 
-    def on_change(self, text):
-        v = self.view_to_filter
+    # ── freeze on Enter ───────────────────────────────────
+    def on_done(self, text: str):
+        self.freeze = True
+        self.apply_filter(text)
+
+    # ── folding logic ─────────────────────────────────────
+    def apply_filter(self, text: str):
+        v = self.panel_view
         if not v:
             return
-
-        # Always unfold first
         v.unfold(sublime.Region(0, v.size()))
-
         if not text:
-            return  # empty filter → nothing folded
-
+            return
         pat = re.compile(re.escape(text), re.IGNORECASE)
-        fold_regions = []
-        start = None
-
-        # Walk every line once; collect contiguous non-matches into regions
+        folds, start = [], None
         for line in v.lines(sublime.Region(0, v.size())):
             if pat.search(v.substr(line)):
                 if start is not None:
-                    fold_regions.append(sublime.Region(start, line.begin()))
+                    folds.append(sublime.Region(start, line.begin()))
                     start = None
             else:
                 if start is None:
                     start = line.begin()
-
         if start is not None:
-            fold_regions.append(sublime.Region(start, v.size()))
-
-        for r in fold_regions:
+            folds.append(sublime.Region(start, v.size()))
+        for r in folds:
             v.fold(r)
 
 
-class PanelFilterResetCommand(sublime_plugin.TextCommand):
-    """Unfold everything in the current view."""
+class PanelFilterResetCommand(sublime_plugin.WindowCommand):
+    """Unfold everything in the active panel or a named one."""
 
-    def run(self, edit):
-        self.view.unfold(sublime.Region(0, self.view.size()))
+    def run(self, panel_name: str | None = None):
+        if panel_name is None:
+            pnl = self.window.active_panel()
+            if not pnl or not pnl.startswith("output."):
+                return
+            panel_name = pnl[7:]
+        view = self.window.find_output_panel(panel_name)
+        if view:
+            view.unfold(sublime.Region(0, view.size()))
