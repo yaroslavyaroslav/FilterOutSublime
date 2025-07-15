@@ -1,0 +1,38 @@
+[
+    {
+        "mnemonic": "n",
+        "caption": "Preferences",
+        "id": "preferences",
+        "children": [
+            {
+                "mnemonic": "P",
+                "caption": "Package Settings",
+                "id": "package-settings",
+                "children": [
+                    {
+                        "caption": "FilterOut",
+                        "children": [
+                            {
+                                "caption": "Settings",
+                                "command": "edit_settings",
+                                "args": {
+                                    "base_file": "${packages}/FilterOut/FilterOut.sublime-settings",
+                                    "default": "// Settings in here override those in \"FilterOut/FilterOut.sublime-settings\"\n{\n\t\"window_size\": $0\n}\n"
+                                }
+                            },
+                            // {
+                            //     "caption": "Key Bindings",
+                            //     "command": "edit_settings",
+                            //     "args": {
+                            //         "base_file": "${packages}/FilterOut/Default.sublime-keymap",
+                            //         "user_file": "${packages}/User/Default (${platform}).sublime-keymap",
+                            //         "default": "[\n\t$0\n]\n",
+                            //     }
+                            // },
+                        ]
+                    },
+                ]
+            }
+        ]
+    }
+]
