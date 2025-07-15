@@ -18,65 +18,76 @@ def _project_settings() -> dict:  # noqa: D401 – helper
 
 
 # ───────────────────────── core helper ─────────────────────────
-def _apply_filter(view: sublime.View, raw: str, context: int = 3):
+def _apply_filter(view: sublime.View, raw: str, context: int = 5):
+    """Show each matching line + `context` lines after; fold every gap
+    by starting at the first folded line, so the … marker is on top."""
+
+    # 1) reset any previous folds
     view.unfold(sublime.Region(0, view.size()))
 
+    # 2) build OR-pattern
     tokens = [re.escape(t) for t in raw.split() if t]
     if not tokens:
         return
     pat = re.compile("|".join(tokens), re.IGNORECASE)
 
-    # 1) build windows of “match + context”
+    # 3) get all lines and their count
     all_lines = view.lines(sublime.Region(0, view.size()))
-    windows = []
-    for idx, line in enumerate(all_lines):
-        if pat.search(view.substr(line)):
-            start = line.begin()
-            end_idx = min(idx + context, len(all_lines) - 1)
-            end = all_lines[end_idx].end()
-            windows.append((start, end))
+    n = len(all_lines)
 
-    # no match → fold everything
+    # 4) collect (start_idx, end_idx) windows in line indices
+    windows = []
+    for i, lr in enumerate(all_lines):
+        if pat.search(view.substr(lr)):
+            start_i = i
+            end_i = min(i + context, n - 1)
+            windows.append((start_i, end_i))
+
+    # 5) if nothing matches, fold everything
     if not windows:
         view.fold(sublime.Region(0, view.size()))
         return
 
-    # 2) merge overlaps
+    # 6) merge overlapping windows (in index space)
     windows.sort()
     merged = []
-    cur_s, cur_e = windows[0]
+    cs, ce = windows[0]
     for s, e in windows[1:]:
-        if s <= cur_e:
-            cur_e = max(cur_e, e)
+        if s <= ce + 1:
+            ce = max(ce, e)
         else:
-            merged.append((cur_s, cur_e))
-            cur_s, cur_e = s, e
-    merged.append((cur_s, cur_e))
+            merged.append((cs, ce))
+            cs, ce = s, e
+    merged.append((cs, ce))
 
-    # 3) compute fold regions *between* merged windows,
-    #    leaving exactly one line of gap visible between them
+    # 7) compute gaps between merged windows
     folds = []
-    # before first window?
-    first_s = merged[0][0]
+
+    # 7a) top gap
+    first_s, first_e = merged[0]
     if first_s > 0:
-        # leave the first line, fold the rest up to the match start
-        folds.append(sublime.Region(1, first_s))
+        # fold from line 0 up to line first_s-1
+        start_pt = all_lines[0].begin()
+        end_pt = all_lines[first_s - 1].end()
+        folds.append(sublime.Region(start_pt, end_pt))
 
-    # between windows
-    for (prev_s, prev_e), (next_s, next_e) in zip(merged, merged[1:]):
-        # fold from just after the “one-line gap” to the next window
-        gap_start = prev_e + 1  # skip the newline after the context
-        gap_end = next_s  # up to the next match start
-        if gap_start < gap_end:
-            folds.append(sublime.Region(gap_start, gap_end))
+    # 7b) middle gaps
+    for (ps, pe), (ns, ne) in zip(merged, merged[1:]):
+        gap_start = pe + 1
+        gap_end = ns - 1
+        if gap_start <= gap_end:
+            start_pt = all_lines[gap_start].begin()
+            end_pt = all_lines[gap_end].end()
+            folds.append(sublime.Region(start_pt, end_pt))
 
-    # after last window?
-    last_e = merged[-1][1]
-    if last_e < view.size():
-        # leave one blank line, then fold the rest
-        folds.append(sublime.Region(last_e + 1, view.size()))
+    # 7c) bottom gap
+    last_s, last_e = merged[-1]
+    if last_e < n - 1:
+        start_pt = all_lines[last_e + 1].begin()
+        end_pt = all_lines[-1].end()
+        folds.append(sublime.Region(start_pt, end_pt))
 
-    # 4) apply folding
+    # 8) apply folding
     for r in folds:
         view.fold(r)
 
