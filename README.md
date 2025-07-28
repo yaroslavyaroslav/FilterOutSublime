@@ -11,9 +11,8 @@ Two commands:
 ## Installation
 
 ### With Package Control
-1. `Package Control: Add Repository` → `https://github.com/yourname/FilterOut`  
+1. `Package Control: Add Repository` → `https://github.com/yaroslavyaroslav/FilterOut`  
 2. `Package Control: Install Package` → **FilterOut**
-
 ### Manual
 Clone / download into your `Packages` folder (e.g. `~/Library/Application Support/Sublime Text/Packages/FilterOut`).
 
